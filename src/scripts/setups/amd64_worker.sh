@@ -24,3 +24,12 @@ sudo apt-get update && sudo apt-get install -y \
     git \
     tor \
     torsocks \
+
+
+# protocol	Direction	Port Range	Purpose	Used By
+# TCP	Inbound	10250	Kubelet API	Self, Control plane
+# TCP	Inbound	10256	kube-proxy	Self, Load balancers
+# TCP	Inbound	30000-32767	NodePort Services†	All
+# REFERENCES:
+# - https://kubernetes.io/docs/reference/networking/ports-and-protocols/#node
+declare -r REQUIRED_PORTS=(10250 10256 30000-32767)

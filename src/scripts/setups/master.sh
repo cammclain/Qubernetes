@@ -37,7 +37,8 @@ check_sudo() {
 # TCP	Inbound	10250	Kubelet API	Self, Control plane
 # TCP	Inbound	10259	kube-scheduler	Self
 # TCP	Inbound	10257	kube-controller-manager	Self
-
+# REFERENCES:
+# - https://kubernetes.io/docs/reference/ports-and-protocols/
 declare -r REQUIRED_PORTS=(6443 2379 2380 10250 10259 10257)
 
 check_ports() {
@@ -65,5 +66,62 @@ check_ports() {
         return 1
     fi
 
+    return 0
+}
+
+
+
+# Swap configuration
+# The default behavior of a kubelet is to fail to start if swap memory is detected on a node. 
+# This function ensures swap is completely disabled on Debian systems.
+check_swap() {
+    echo "Checking and disabling swap..."
+    
+    # First disable all active swap
+    if [ -n "$(swapon --show)" ]; then
+        echo "Active swap detected. Disabling all swap devices..."
+        sudo swapoff -a || {
+            echo "Error: Failed to disable active swap" >&2
+            return 1
+        }
+    fi
+
+    # Remove swap entries from /etc/fstab
+    if grep -q -E '^[^#].*\sswap\s' /etc/fstab; then
+        echo "Removing swap entries from /etc/fstab..."
+        sudo sed -i '/\sswap\s/d' /etc/fstab || {
+            echo "Error: Failed to remove swap entries from /etc/fstab" >&2
+            return 1
+        }
+    fi
+
+    # Disable swap in systemd if present
+    if [ -f /etc/systemd/system/swap.target ]; then
+        echo "Disabling systemd swap target..."
+        sudo systemctl mask swap.target || {
+            echo "Error: Failed to mask swap.target" >&2
+            return 1
+        }
+    fi
+
+    # Remove any swap files
+    local swap_files=$(find /etc -type f -name "*.swap")
+    if [ -n "$swap_files" ]; then
+        echo "Removing swap files..."
+        for file in $swap_files; do
+            sudo rm -f "$file" || {
+                echo "Error: Failed to remove swap file: $file" >&2
+                return 1
+            }
+        done
+    fi
+
+    # Verify swap is disabled
+    if [ -n "$(swapon --show)" ]; then
+        echo "Error: Failed to completely disable swap" >&2
+        return 1
+    fi
+
+    echo "Swap has been successfully disabled"
     return 0
 }
