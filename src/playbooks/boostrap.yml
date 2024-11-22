@@ -1,0 +1,31 @@
+# playbooks/bootstrap.yml
+- name: Bootstrap Kubernetes Nodes
+  hosts: all
+  become: true
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - docker.io
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: true
+
+    - name: Enable and start Docker service
+      systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Initialize Kubernetes cluster (only on control plane)
+      shell: kubeadm init --pod-network-cidr=192.168.0.0/16
+      when: inventory_hostname == groups['control_plane'][0]
+
+    - name: Install Calico networking
+      shell: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+      when: inventory_hostname == groups['control_plane'][0]
+
+    - name: Join worker nodes to the cluster
+      shell: kubeadm join {{ hostvars[groups['control_plane'][0]]['ansible_host'] }}:6443 --token {{ kubeadm_token }} --discovery-token-ca-cert-hash {{ discovery_hash }}
+      when: inventory_hostname in groups['workers']
